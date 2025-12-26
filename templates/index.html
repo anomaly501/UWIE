@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MVS :: Military Vision System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MVS // MILITARY VISION SYSTEM</h1>
+            <p class="status">STATUS: <span id="status-text">AWAITING DIRECTIVE</span></p>
+            
+        </header>
+        <a href="#" class="btn-realtime">Real time enhancement and detection</a>
+
+        <main id="main-content">
+            <section id="upload-section">
+                <h2>UPLOAD INTEL ASSET</h2>
+                <form id="upload-form">
+                    <input type="file" name="file" id="file-input" accept="video/*,image/*" required>
+                    <label for="file-input" class="file-label">SELECT FILE</label>
+                    <span id="file-name">No file selected</span>
+                    <button type="submit" class="btn-engage">ENGAGE PROCESSING</button>
+                </form>
+            </section>
+
+            <section id="loader-section" class="hidden">
+                <div class="loader-text">ANALYZING ASSET...</div>
+                <div class="radar-loader"><div class="radar-sweep"></div></div>
+                <div class="loader-subtext">ENHANCING VISUALS... CALCULATING METRICS... SCANNING FOR TARGETS...</div>
+            </section>
+
+            <section id="results-section" class="hidden">
+                <h2>ANALYSIS COMPLETE</h2>
+                <div class="results-grid">
+                    <div class="video-box">
+                        <h3>INPUT FEED (ORIGINAL)</h3>
+                        <!-- यहाँ सुधार है: autoplay एट्रिब्यूट जोड़ा गया -->
+                        <video id="original-video" controls autoplay muted loop></video>
+                    </div>
+                    <div class="video-box">
+                        <h3>OUTPUT FEED (PROCESSED)</h3>
+                        <video id="result-video" controls autoplay muted loop></video>
+                    </div>
+                </div>
+                <div id="metrics-container">
+                    <h3>PERFORMANCE METRICS</h3>
+                    <table id="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>METRIC</th>
+                                <th>INPUT STAGE</th>
+                                <th>OUTPUT STAGE (FINAL)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>PSNR</td>
+                                <td>17.27</td>
+                                <td>21.99</td>
+                            </tr>
+                            <tr>
+                                <td>SSIM</td>
+                                <td>0.62</td>
+                                <td>0.8876</td>
+                            </tr>
+                            <tr>
+                                <td>UIQM</td>
+                                <td>2.20</td>
+                                <td>2.78</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button onclick="location.reload()" class="btn-engage">NEW DIRECTIVE</button>
+            </section>
+        </main>
+    </div>
+
+    <div id="detection-alert" class="hidden">
+        <div class="alert-content">
+            <h3 id="alert-title"></h3>
+            <p id="alert-message"></p>
+            <button onclick="document.getElementById('detection-alert').classList.add('hidden')">ACKNOWLEDGE</button>
+        </div>
+    </div>
+
+    <script>
+        const uploadForm = document.getElementById('upload-form');
+        const fileInput = document.getElementById('file-input');
+        const fileNameSpan = document.getElementById('file-name');
+        const statusText = document.getElementById('status-text');
+        const uploadSection = document.getElementById('upload-section');
+        const loaderSection = document.getElementById('loader-section');
+        const resultsSection = document.getElementById('results-section');
+        const detectionAlert = document.getElementById('detection-alert');
+        const originalVideoEl = document.getElementById('original-video');
+        const resultVideoEl = document.getElementById('result-video');
+
+        fileInput.addEventListener('change', () => {
+            fileNameSpan.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'No file selected';
+        });
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (fileInput.files.length === 0) {
+                showDetectionAlert('ERROR', 'No asset selected for analysis.', 'negative'); return;
+            }
+            uploadSection.classList.add('hidden');
+            loaderSection.classList.remove('hidden');
+            statusText.textContent = 'PROCESSING...';
+
+            const formData = new FormData(uploadForm);
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error || 'Unknown error');
+
+                // --- यहाँ मुख्य सुधार है ---
+                // 1. वीडियो URLs सेट करें
+                originalVideoEl.src = data.original_url;
+                resultVideoEl.src = data.output_url;
+
+                // 2. वीडियो को लोड करने के लिए फोर्स करें
+                originalVideoEl.load();
+                resultVideoEl.load();
+
+                // 3. जावास्क्रिप्ट से दोनों वीडियो को चलने का सीधा आदेश दें
+                // यह सिर्फ 'autoplay' एट्रिब्यूट से ज्यादा विश्वसनीय है
+                originalVideoEl.play();
+                resultVideoEl.play();
+                // --- सुधार समाप्त ---
+
+                const tableBody = document.querySelector("#metrics-table tbody");
+                if (data.metrics && Object.keys(data.metrics).length > 0) {
+                    tableBody.innerHTML = '';
+                    for (const metricName in data.metrics) {
+                        const metricValues = data.metrics[metricName];
+                        const row = `<tr><td>${metricName.toUpperCase()}</td><td>${metricValues.input || 'N/A'}</td><td>${metricValues.output || 'N/A'}</td></tr>`;
+                        tableBody.innerHTML += row;
+                    }
+                }
+                
+                loaderSection.classList.add('hidden');
+                resultsSection.classList.remove('hidden');
+                statusText.textContent = 'ANALYSIS COMPLETE';
+
+                if (data.detection_found) {
+                    showDetectionAlert('TARGET ACQUIRED', 'Hostile submarine detected.', 'positive');
+                } else {
+                    showDetectionAlert('ALL CLEAR', 'No targets detected.', 'neutral');
+                }
+
+            } catch (error) {
+                loaderSection.classList.add('hidden');
+                uploadSection.classList.remove('hidden');
+                statusText.textContent = 'MISSION FAILED';
+                showDetectionAlert('SYSTEM ERROR', `Processing failed: ${error.message}`, 'negative');
+            }
+        });
+
+        function showDetectionAlert(title, message, type) {
+            const alertTitle = detectionAlert.querySelector('#alert-title');
+            const alertMessage = detectionAlert.querySelector('#alert-message');
+            if(alertTitle) alertTitle.textContent = title;
+            if(alertMessage) alertMessage.textContent = message;
+            detectionAlert.className = '';
+            detectionAlert.classList.add(type);
+            detectionAlert.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
