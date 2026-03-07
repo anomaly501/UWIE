@@ -5,3 +5,4 @@ opencv-python
 Pillow
 ultralytics
 numpy
+pandas
